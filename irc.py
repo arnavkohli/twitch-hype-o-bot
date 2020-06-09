@@ -6,12 +6,32 @@ import random
 from datetime import datetime, time, timedelta
 import logging
 
+from bluetooth import BluetoothSerialPortController
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 class Utility:
 
     @staticmethod
-    def print_and_log(message):
-        print (message)
+    def print_and_log(message, type):
+        if type == 'irc':
+            print (bcolors.HEADER + message +  bcolors.ENDC)
+        elif type == 'calm':
+            print (bcolors.OKBLUE + message +  bcolors.ENDC)
+        elif type == 'pog':
+            print (bcolors.OKGREEN + message +  bcolors.ENDC)
+        elif type == 'meter':
+            print (bcolors.WARNING + message +  bcolors.ENDC)
+        elif type == 'error':
+            print (bcolors.FAIL + message +  bcolors.ENDC)
         logging.info(message)
 
 class IRC:
@@ -34,7 +54,7 @@ class IRC:
  
     def connect(self, server, port, channel, botnick, botpass):
         # Connect to the server
-        Utility.print_and_log("[IRC] Connecting to: " + server)
+        Utility.print_and_log("[IRC] Connecting to: " + server, type='irc')
         self.irc.connect((server, port))
 
         # Perform user authentication
@@ -45,7 +65,7 @@ class IRC:
         # join the channel
         self.irc.send(bytes("JOIN " + channel + "\n", "UTF-8"))
 
-        Utility.print_and_log('[IRC] Connected!')
+        Utility.print_and_log('[IRC] Connected!', type='irc')
 
     def disconnect(self):
         self.irc.send(bytes("PRIVMSG " + "/disconnect" + "\n", "UTF-8"))
@@ -59,7 +79,7 @@ class IRC:
             return f"[ERROR] {err}"
  
         if resp.find('PING') != -1:
-            Utility.print_and_log('[INFO] <REPLYING TO PONG>')                    
+            #Utility.print_and_log('[INFO] <REPLYING TO PONG>')                    
             self.irc.send(bytes('PONG :tmi.twitch.tv', "UTF-8")) 
  
         return resp
@@ -108,9 +128,13 @@ class PogMonitor:
         return sum(self.q) / self.current_length
 
     def main_loop(self):
-        Utility.print_and_log(f"[INFO] Initialising IRC")
+        BluetoothSerialPortController.slow()
+        Utility.print_and_log(f"[INFO] Initialising IRC", type='irc')
         self.initialise_irc()
         blanks = 0
+        decrease_count = 0
+        local_maxima = 0
+
         while True:
             text = self.irc.get_response()
             message_count = text.count('PRIVMSG')
@@ -118,8 +142,8 @@ class PogMonitor:
                 if blanks < 3:
                     blanks += 1
                     continue
-                Utility.print_and_log(f"[ERROR] IRC sent a blank.")
-                Utility.print_and_log(f"[INFO] Reinitialising IRC...")
+                Utility.print_and_log(f"[ERROR] IRC sent a blank.", type='error')
+                Utility.print_and_log(f"[INFO] Reinitialising IRC...", type='irc')
                 self.reinitialise_irc()
                 blanks = 0
                 Time.sleep(2)
@@ -128,14 +152,32 @@ class PogMonitor:
             self.push(message_count)
 
             if self.full():
-                Utility.print_and_log(f"[INFO] MVING AVG: {self.moving_average()}; MSGCNT: {message_count}; QL: {self.current_length}")
-                if message_count > self.moving_average() * self.threshold_multiplier:
+                #Utility.print_and_log(f"[INFO] MVING AVG: {self.moving_average()}; MSGCNT: {message_count}; QL: {self.current_length}")
+                if message_count < local_maxima:
+                    decrease_count += 1
+                    if decrease_count == 3:
+                        BluetoothSerialPortController.slow()
+                        Utility.print_and_log(f"[METER] hype-o-meter chillin' ", type='meter')
+                        local_maxima = 0
+                        decrease_count = 0
+
+                elif message_count > self.moving_average() * self.threshold_multiplier:
+                    BluetoothSerialPortController.fast()
+
+                    local_maxima = message_count
+
                     timeStamp = self.streamStartTime + timedelta(seconds=(datetime.now() - self.startTime).seconds)
-                    Utility.print_and_log(f"[POG] BIGPLAYTIMEBOI CLIP CLIP CLIP @: {timeStamp.time().__str__()}")
+                    #Utility.print_and_log(f"[POG] BIGPLAYTIMEBOI CLIP CLIP CLIP @: {timeStamp.time().__str__()}")
+                    Utility.print_and_log(f"[POG] TWITCH CHAT JUST WENT BONKERS ", type='pog')
+                    Utility.print_and_log(f"[METER] HYPE-O-METER GOIN' CRAZY ", type='meter')
+
+                if local_maxima == 0:
+                    Utility.print_and_log(f"[INFO] twitch chat is calm", type='calm')
+
 
 if __name__ == '__main__':
-    channel = "scream"
-    info = {"hour" : 1, "minute" : 49, "second" : 50}
+    channel = "hiko"
+    info = {"hour" : 9, "minute" : 40, "second" : 15}
     logging.basicConfig(filename=f'{channel}.log',level=logging.DEBUG)
     pog_monitor = PogMonitor(10, channel=channel, stream_stamp_at_script_start=info)
     pog_monitor.main_loop()
