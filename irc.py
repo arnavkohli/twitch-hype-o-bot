@@ -177,7 +177,10 @@ class PogMonitor:
 
 if __name__ == '__main__':
     channel = "hiko"
+    
+    # Add support to scrape dynamically
     info = {"hour" : 9, "minute" : 40, "second" : 15}
+    
     logging.basicConfig(filename=f'{channel}.log',level=logging.DEBUG)
     pog_monitor = PogMonitor(10, channel=channel, stream_stamp_at_script_start=info)
     pog_monitor.main_loop()
